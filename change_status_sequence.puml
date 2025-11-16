@@ -1,0 +1,72 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 20
+skinparam maxmessagesize 60
+skinparam sequenceParticipant underline
+
+title Change Product Status (Thay Đổi Trạng Thái Sản Phẩm)
+
+actor Seller
+boundary "DashboardPage\n<<dashboard.html>>" as DP
+control "ShopController" as SC
+participant "ProductService" as PS
+participant "ProductServiceImpl" as PSI
+entity "ProductRepository" as PR
+entity "ProductStoreRepository" as PSR
+database "Database" as DB
+
+== Change Product Status ==
+
+Seller -> DP: chọn thay đổi trạng thái sản phẩm
+activate DP
+DP -> SC: POST /shop/products/{id}/status\n(status: ACTIVE/HIDDEN/BLOCKED)
+activate SC
+
+SC -> PS: changeStatus(productId, status)
+activate PS
+PS -> PSI: changeStatus(productId, status)
+activate PSI
+
+PSI -> PR: findById(productId)
+activate PR
+PR -> DB: Lấy thông tin sản phẩm theo ID
+DB --> PR: Product
+PR --> PSI: Product
+deactivate PR
+
+PSI -> PSI: setStatus(status)
+PSI -> PR: save(product)
+activate PR
+PR -> DB: Cập nhật trạng thái sản phẩm
+DB --> PR: updated
+PR --> PSI: Product
+deactivate PR
+
+PSI -> PSR: findByProductIdOrderByIdDesc(productId)
+activate PSR
+PSR -> DB: Lấy danh sách tất cả serials của sản phẩm
+DB --> PSR: List<ProductStore>
+PSR --> PSI: serials
+deactivate PSR
+
+PSI -> PSI: Cập nhật trạng thái tất cả serials\n(setStatus cho mỗi ProductStore)
+
+PSI -> PSR: saveAll(serials)
+activate PSR
+PSR -> DB: Cập nhật trạng thái tất cả serials
+DB --> PSR: updated
+PSR --> PSI: saved
+deactivate PSR
+
+PSI --> PS: Product
+deactivate PSI
+PS --> SC: Product
+deactivate PS
+
+SC --> DP: Redirect đến /shop/dashboard\nThông báo: "Đã đổi trạng thái sản phẩm"
+deactivate SC
+DP --> Seller: Chuyển hướng đến dashboard
+deactivate DP
+
+@enduml
+

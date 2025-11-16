@@ -1,0 +1,91 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 20
+skinparam maxmessagesize 60
+skinparam sequenceParticipant underline
+
+title Delete Product (Xóa Sản Phẩm - Ẩn Sản Phẩm)
+
+actor Seller
+boundary "DashboardPage\n<<dashboard.html>>" as DP
+control "ShopController" as SC
+participant "ProductService" as PS
+participant "ProductServiceImpl" as PSI
+entity "ProductRepository" as PR
+database "Database" as DB
+
+== Phase 1: Request Delete Product ==
+
+Seller -> DP: chọn xóa sản phẩm
+activate Seller
+activate DP
+DP -> SC: DELETE /shop/products/{id}
+activate SC
+
+== Phase 2: Validate Ownership ==
+
+SC -> PS: get(productId)
+activate PS
+PS -> PSI: get(productId)
+activate PSI
+PSI -> PR: findById(productId)
+activate PR
+PR -> DB: Lấy thông tin sản phẩm theo ID\nSELECT * FROM product WHERE id = ?
+activate DB
+DB --> PR: Product
+deactivate DB
+PR --> PSI: Product
+deactivate PR
+PSI --> PS: Product
+deactivate PSI
+PS --> SC: Product
+deactivate PS
+
+SC -> SC: Kiểm tra quyền\n(product.shopId == shopId từ session)
+
+== Phase 3: Hide Product (Set Status HIDDEN) ==
+
+alt Sản phẩm thuộc về shop
+    SC -> PS: delete(productId)
+    activate PS
+    PS -> PSI: delete(productId)
+    activate PSI
+
+    PSI -> PR: findById(productId)
+    activate PR
+    PR -> DB: Lấy thông tin sản phẩm\nSELECT * FROM product WHERE id = ?
+    activate DB
+    DB --> PR: Product
+    deactivate DB
+    PR --> PSI: Product
+    deactivate PR
+
+    PSI -> PSI: setStatus(HIDDEN)\nẨn sản phẩm để customer không thấy\nShop vẫn thấy để có thể bật lại bán tiếp
+    PSI -> PR: save(product)
+    activate PR
+    PR -> DB: Cập nhật trạng thái sản phẩm thành HIDDEN\nUPDATE product SET status='HIDDEN' WHERE id=?
+    activate DB
+    DB --> PR: updated
+    deactivate DB
+    PR --> PSI: Product
+    deactivate PR
+
+    PSI --> PS: (void)
+    deactivate PSI
+    PS --> SC: (void)
+    deactivate PS
+
+    SC --> DP: JSON Response\n(success: true, message: "Đã ẩn sản phẩm thành công")
+else Sản phẩm không thuộc về shop
+    SC --> DP: JSON Response\n(success: false, message: "Không có quyền xóa sản phẩm này")
+end
+
+== Phase 4: Return Response ==
+
+deactivate SC
+DP --> Seller: Hiển thị thông báo và reload trang
+deactivate DP
+deactivate Seller
+
+@enduml
+

@@ -1,0 +1,148 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 20
+skinparam maxmessagesize 60
+skinparam sequenceParticipant underline
+
+title Update Product (Cập Nhật Sản Phẩm)
+
+actor Seller
+boundary "UpdateProductPage\n<<updateProduct.html>>" as UP
+control "ShopController" as SC
+participant "ProductService" as PS
+participant "ProductServiceImpl" as PSI
+entity "ProductRepository" as PR
+participant "StorageService" as SS
+participant "ExcelImportService" as EIS
+participant "InventoryService" as IS
+database "Database" as DB
+
+== Phase 1: Submit Update Product Form ==
+
+Seller -> UP: submit form\n(ProductForm: productName, price, description, categoryId, file, serialFile, status)
+activate Seller
+activate UP
+UP -> SC: POST /shop/updateProduct/{id}\n(ProductForm)
+activate SC
+
+== Phase 2: Update Product Information ==
+
+SC -> PS: updateProduct(productId, form)
+activate PS
+PS -> PSI: updateProduct(productId, form)
+activate PSI
+
+PSI -> PR: findById(productId)
+activate PR
+PR -> DB: Lấy thông tin sản phẩm theo ID\nSELECT * FROM product WHERE id = ?
+activate DB
+DB --> PR: Product
+deactivate DB
+PR --> PSI: Product
+deactivate PR
+
+PSI -> PSI: Cập nhật thông tin sản phẩm\n(set productName, price, description, categoryId nếu có)
+
+alt Nếu có file ảnh mới
+    PSI -> SS: saveProductImage(file)
+    activate SS
+    SS -> SS: Lưu file ảnh vào thư mục\nTạo tên file duy nhất
+    SS --> PSI: imagePath
+    deactivate SS
+    PSI -> PSI: setImage(imagePath)
+end
+
+PSI -> PR: save(product)
+activate PR
+PR -> DB: Cập nhật thông tin sản phẩm\nUPDATE product SET product_name=?, price=?, description=?, category_id=?, image=? WHERE id=?
+activate DB
+DB --> PR: updated
+deactivate DB
+PR --> PSI: updatedProduct
+deactivate PR
+
+PSI --> PS: updatedProduct
+deactivate PSI
+PS --> SC: Product
+deactivate PS
+
+== Phase 3: Import Excel Serials (Optional) ==
+
+alt Nếu có file Excel serials
+    SC -> EIS: importSerialsFromExcel(importForm)
+    activate EIS
+    EIS -> EIS: Đọc file Excel và tạo ProductStore\nTạo danh sách serial codes mới
+    EIS -> DB: Lưu danh sách serial codes mới\nINSERT INTO product_store (product_id, serial_code, status, face_value)
+    activate DB
+    DB --> EIS: saved
+    deactivate DB
+    EIS --> SC: ImportResult
+    deactivate EIS
+
+    SC -> IS: rebuildProductQuantity(productId)
+    activate IS
+    IS -> DB: Đếm lại số lượng sản phẩm ACTIVE\nSELECT COUNT(*) FROM product_store WHERE product_id=? AND status='ACTIVE'
+    activate DB
+    DB --> IS: activeCount
+    deactivate DB
+    IS -> PR: save(product với availableStock mới)
+    activate PR
+    PR -> DB: Cập nhật số lượng tồn kho\nUPDATE product SET available_stock=? WHERE id=?
+    activate DB
+    DB --> PR: updated
+    deactivate DB
+    PR --> IS: Product
+    deactivate PR
+    IS --> SC: Product
+    deactivate IS
+end
+
+== Phase 4: Update Status (Optional) ==
+
+alt Nếu có thay đổi status
+    SC -> PS: changeStatus(productId, status)
+    activate PS
+    PS -> PSI: changeStatus(productId, status)
+    activate PSI
+    
+    PSI -> PR: findById(productId)
+    activate PR
+    PR -> DB: Lấy thông tin sản phẩm\nSELECT * FROM product WHERE id = ?
+    activate DB
+    DB --> PR: Product
+    deactivate DB
+    PR --> PSI: Product
+    deactivate PR
+    
+    PSI -> PSI: setStatus(status)
+    PSI -> PR: save(product)
+    activate PR
+    PR -> DB: Cập nhật trạng thái sản phẩm\nUPDATE product SET status=? WHERE id=?
+    activate DB
+    DB --> PR: updated
+    deactivate DB
+    PR --> PSI: Product
+    deactivate PR
+    
+    PSI -> PSI: Cập nhật tất cả serials cùng trạng thái\nLấy danh sách ProductStore và setStatus cho từng serial
+    PSI -> DB: Cập nhật trạng thái tất cả ProductStore\nUPDATE product_store SET status=? WHERE product_id=?
+    activate DB
+    DB --> PSI: updated
+    deactivate DB
+    
+    PSI --> PS: Product
+    deactivate PSI
+    PS --> SC: Product
+    deactivate PS
+end
+
+== Phase 5: Return Response ==
+
+SC --> UP: Redirect đến /shop/dashboard\nThông báo: "Đã cập nhật sản phẩm thành công!"
+deactivate SC
+UP --> Seller: Chuyển hướng đến dashboard
+deactivate UP
+deactivate Seller
+
+@enduml
+

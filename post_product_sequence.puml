@@ -1,0 +1,71 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 20
+skinparam maxmessagesize 60
+skinparam sequenceParticipant underline
+
+title Post Product (Tạo Sản Phẩm)
+
+actor Seller
+boundary "AddProductPage\n<<addProduct.html>>" as AP
+control "ShopController" as SC
+participant "ProductService" as PS
+participant "ProductServiceImpl" as PSI
+entity "ProductRepository" as PR
+participant "StorageService" as SS
+database "Database" as DB
+
+== Phase 1: Submit Product Form ==
+
+Seller -> AP: submit form\n(ProductForm: productName, price, description, categoryId, file)
+activate Seller
+activate AP
+AP -> SC: POST /shop/addProduct\n(ProductForm với validation)
+activate SC
+
+== Phase 2: Create Product Object ==
+
+SC -> PS: createProduct(shopId, form)
+activate PS
+PS -> PSI: createProduct(shopId, form)
+activate PSI
+
+PSI -> PSI: Tạo đối tượng Product mới\n(set shopId, productName, price, description, categoryId, status=HIDDEN, availableStock=0)
+
+== Phase 3: Save Product Image (Optional) ==
+
+alt Nếu có file ảnh
+    PSI -> SS: saveProductImage(file)
+    activate SS
+    SS -> SS: Lưu file ảnh vào thư mục\nTạo tên file duy nhất
+    SS --> PSI: imagePath
+    deactivate SS
+    PSI -> PSI: setImage(imagePath)
+end
+
+== Phase 4: Persist Product to Database ==
+
+PSI -> PR: save(product)
+activate PR
+PR -> DB: Lưu thông tin sản phẩm mới\nINSERT INTO product (shop_id, product_name, price, description, category_id, status, available_stock, image)
+activate DB
+DB --> PR: Product (có ID)
+deactivate DB
+PR --> PSI: savedProduct
+deactivate PR
+
+== Phase 5: Return Response ==
+
+PSI --> PS: savedProduct
+deactivate PSI
+PS --> SC: Product
+deactivate PS
+
+SC --> AP: Redirect đến /shop/dashboard\nThông báo: "Đã tạo sản phẩm thành công!"
+deactivate SC
+AP --> Seller: Chuyển hướng đến dashboard
+deactivate AP
+deactivate Seller
+
+@enduml
+

@@ -8,10 +8,7 @@ import java.util.List;
 
 public interface OrderService {
     
-    /**
-     * Tạo đơn hàng mới (chờ xử lý)
-     * Kiểm tra balance, hold tiền, tạo order với status "PENDING"
-     */
+
     Order createOrder(CheckoutForm form, User buyer);
     
     /**

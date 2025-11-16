@@ -1,0 +1,180 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 20
+skinparam maxmessagesize 60
+skinparam sequenceParticipant underline
+
+title Create Order (Tạo Đơn Hàng)
+
+actor Customer
+boundary "OrderPage\n<<checkout.html>>" as OP
+control "OrderController" as OC
+participant "ProductService" as PS
+participant "ProductServiceImpl" as PSI
+entity "ProductRepository" as PR
+entity "ProductStoreRepository" as PSR
+participant "OrderService" as OS
+participant "OrderServiceImpl" as OSI
+entity "UserRepository" as UR
+entity "ShopRepository" as SR
+entity "OrderRepository" as OR
+entity "OrderItemRepository" as OIR
+database "Database" as DB
+
+== Phase 1: Display Checkout Page ==
+
+Customer -> OP: chọn mua hàng
+activate OP
+OP -> OC: GET /orders/checkout/{productId}?quantity=1
+activate OC
+
+OC -> PS: get(productId)
+activate PS
+PS -> PSI: get(productId)
+activate PSI
+PSI -> PR: findById(productId)
+activate PR
+PR -> DB: Lấy thông tin sản phẩm theo ID
+DB --> PR: Product
+PR --> PSI: Product
+deactivate PR
+PSI --> PS: Product
+deactivate PSI
+PS --> OC: Product
+deactivate PS
+
+OC -> PSR: countByProductIdAndStatus(productId, ACTIVE)
+activate PSR
+PSR -> DB: Đếm số lượng sản phẩm còn tồn kho (ACTIVE)
+DB --> PSR: count
+PSR --> OC: availableStock
+deactivate PSR
+
+OC --> OP: Hiển thị trang checkout\n(product, form, quantity, totalAmount, balance, availableStock)
+deactivate OC
+OP --> Customer: Hiển thị trang checkout
+deactivate OP
+
+== Phase 2: Submit Order ==
+
+Customer -> OP: submit form
+activate OP
+OP -> OC: POST /orders/checkout/submit\n(CheckoutForm: productId, quantity, messageToSeller)
+activate OC
+
+OC -> OS: createOrder(form, user)
+activate OS
+OS -> OSI: createOrder(form, buyer)
+activate OSI
+
+== Phase 3: Acquire Lock & Validate ==
+
+OSI -> PR: findById(productId)\n(PESSIMISTIC_WRITE lock)
+activate PR
+PR -> DB: Lấy thông tin sản phẩm và khóa bản ghi
+DB --> PR: Product (đã khóa)
+PR --> OSI: Product
+deactivate PR
+
+OSI -> PSR: countByProductIdAndStatus(productId, ACTIVE)
+activate PSR
+PSR -> DB: Đếm số lượng sản phẩm còn tồn kho
+DB --> PSR: availableCount
+PSR --> OSI: availableCount
+deactivate PSR
+
+OSI -> UR: findById(buyerId)\n(PESSIMISTIC_WRITE lock)
+activate UR
+UR -> DB: Lấy thông tin người dùng và khóa bản ghi
+DB --> UR: User (đã khóa)
+UR --> OSI: User
+deactivate UR
+
+== Phase 4: Get Seller & Serial Codes ==
+
+OSI -> SR: findById(shopId)
+activate SR
+SR -> DB: Lấy thông tin shop theo ID
+DB --> SR: Shop
+SR --> OSI: Shop
+deactivate SR
+
+OSI -> PSR: findAvailableSerialsByProductId(productId, quantity)\n(PESSIMISTIC_WRITE lock)
+activate PSR
+PSR -> DB: Lấy danh sách serial codes ACTIVE\nSắp xếp theo ID, giới hạn số lượng\nKhóa bản ghi để tránh xung đột
+DB --> PSR: List<ProductStore> (đã khóa)
+PSR --> OSI: serialsToSell
+deactivate PSR
+
+== Phase 5: Deduct Money & Create Order ==
+
+OSI -> UR: save(buyerWithLock)
+activate UR
+UR -> DB: Cập nhật số dư tài khoản người mua
+DB --> UR: updated
+UR --> OSI: User
+deactivate UR
+
+OSI -> OR: save(order)
+activate OR
+OR -> DB: Lưu thông tin đơn hàng mới
+DB --> OR: Order (có ID)
+OR --> OSI: Order
+deactivate OR
+
+== Phase 6: Create OrderItems & Mark ProductStore ==
+
+loop Với mỗi ProductStore trong serialsToSell
+    OSI -> PSR: save(ProductStore)\n(setStatus BLOCKED)
+    activate PSR
+    PSR -> DB: Cập nhật trạng thái ProductStore thành BLOCKED
+    DB --> PSR: updated
+    PSR --> OSI: ProductStore
+    deactivate PSR
+end
+
+OSI -> OIR: saveAll(orderItems)
+activate OIR
+OIR -> DB: Lưu danh sách OrderItem
+DB --> OIR: saved
+OIR --> OSI: List<OrderItem>
+deactivate OIR
+
+OSI -> PSR: countByProductIdAndStatus(productId, ACTIVE)
+activate PSR
+PSR -> DB: Đếm lại số lượng sản phẩm ACTIVE còn lại
+DB --> PSR: activeCount
+PSR --> OSI: activeCount
+deactivate PSR
+
+OSI -> PR: save(product)\n(setAvailableStock)
+activate PR
+PR -> DB: Cập nhật số lượng tồn kho của sản phẩm
+DB --> PR: updated
+PR --> OSI: Product
+deactivate PR
+
+OSI --> OS: Order
+deactivate OSI
+OS --> OC: Order
+deactivate OS
+
+== Phase 7: Trigger Async Processing & Response ==
+
+OC ->> OS: processOrderAsync(orderId)\n(async, fire-and-forget)
+note right: Xử lý bất đồng bộ\n(không chờ kết quả)
+
+OC -> UR: findById(userId)
+activate UR
+UR -> DB: Lấy thông tin người dùng mới nhất
+DB --> UR: updatedUser
+UR --> OC: updatedUser
+deactivate UR
+
+OC --> OP: Redirect đến /orders/history\nThông báo: "Đặt hàng thành công! Mã đơn hàng: ..."
+deactivate OC
+OP --> Customer: Chuyển hướng đến /orders/history
+deactivate OP
+
+@enduml
+

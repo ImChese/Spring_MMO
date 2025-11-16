@@ -1,0 +1,65 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 20
+skinparam maxmessagesize 60
+skinparam sequenceParticipant underline
+
+title Handle Order (Xử Lý Đơn Hàng)
+
+participant "OrderController" as OC
+participant "OrderService" as OS
+participant "OrderServiceImpl" as OSI
+entity "OrderRepository" as OR
+entity "UserRepository" as UR
+entity "ConfigurationRepository" as CR
+database "Database" as DB
+
+== Async Processing: Transfer Money to Seller ==
+
+OC ->> OS: processOrderAsync(orderId)\n(async, fire-and-forget)
+activate OS
+OS ->> OSI: processOrderAsync(orderId)\n(@Async)
+activate OSI
+
+note over OSI: Xử lý chuyển tiền cho seller\nvà cập nhật trạng thái đơn hàng
+
+OSI -> OR: findById(orderId)
+activate OR
+OR -> DB: Lấy thông tin đơn hàng
+DB --> OR: Order
+OR --> OSI: Order
+deactivate OR
+
+OSI -> UR: findById(sellerUserId)
+activate UR
+UR -> DB: Lấy thông tin seller
+DB --> UR: User (seller)
+UR --> OSI: seller
+deactivate UR
+
+OSI -> CR: findByConfigKey("FEE")
+activate CR
+CR -> DB: Lấy cấu hình phí sàn
+DB --> CR: Configuration
+CR --> OSI: feeConfig
+deactivate CR
+
+OSI -> UR: save(seller)\n(cộng tiền cho seller)
+activate UR
+UR -> DB: Cập nhật balance seller\n(trừ phí sàn)
+DB --> UR: updated
+UR --> OSI: seller
+deactivate UR
+
+OSI -> OR: save(order)\n(cập nhật status)
+activate OR
+OR -> DB: Cập nhật trạng thái đơn hàng
+DB --> OR: updated
+OR --> OSI: Order
+deactivate OR
+
+deactivate OSI
+deactivate OS
+
+@enduml
+
