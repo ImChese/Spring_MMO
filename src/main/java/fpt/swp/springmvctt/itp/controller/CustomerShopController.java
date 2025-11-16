@@ -30,6 +30,8 @@ public class CustomerShopController {
     /**
      * Xem danh sách tất cả các shop (chỉ shop đang ACTIVE)
      */
+
+    //toi bi nug ga
     @GetMapping("/list")
     public String listShops(
             @RequestParam(defaultValue = "0") int page,
