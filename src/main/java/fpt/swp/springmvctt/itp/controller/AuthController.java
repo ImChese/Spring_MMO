@@ -16,7 +16,6 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
 public class AuthController {
-
     @Autowired
     private UserService userService;
 
@@ -70,7 +69,7 @@ public class AuthController {
             redirectAttributes.addFlashAttribute("success", "Đăng nhập thành công!");
             session.setAttribute("user", user.get());
             
-            // ✅ FIX: Check null role trước khi gọi getName()
+            //  FIX: Check null role trước khi gọi getName()
             String roleName = (user.get().getRole() != null) ? user.get().getRole().getName() : "CUSTOMER";
             session.setAttribute("role", roleName);
             
@@ -191,7 +190,6 @@ public class AuthController {
             model.addAttribute("token", token);
             return "login/reset-password-form";
         }
-
         if (userService.resetPassword(token, newPassword)) {
             model.addAttribute("success", "Đặt lại mật khẩu thành công!");
             return "login/login";
@@ -200,7 +198,6 @@ public class AuthController {
             return "login/forgot-password";
         }
     }
-
     @GetMapping("/logout")
     public String logout(HttpSession session, RedirectAttributes redirectAttributes) {
         User user = (User) session.getAttribute("user");

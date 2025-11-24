@@ -55,7 +55,11 @@
                       onclick="var d=document.getElementById('shopOrdersDropdown');if(d){d.style.display=d.style.display==='none'?'block':'none';}">
                   Xin chào,
                   <strong th:text="${session.user.fullName != null ? session.user.fullName : session.user.username}">User</strong>
-                  <i class="fas fa-chevron-down" style="font-size:.7rem;margin-left:4px;"></i>
+                </br>Số dư:<td th:text="${session.user.balance != null
+              ? #numbers.formatInteger(session.user.balance, 1, 'POINT') + ' đ'
+              : '0 đ'}">
+</td>
+                    <i class="fas fa-chevron-down" style="font-size:.7rem;margin-left:4px;"></i>
                 </span>
                 
                 <!-- Dropdown cho tất cả user -->
